@@ -25,6 +25,9 @@ start:
 
                 call    precalc_rails
 
+                ; развернуть текстуры с маской для скроллера
+                call prepare_textures
+
 Restart:
                 lxi sp, $100
                 lxi h, colors0+15
@@ -32,6 +35,14 @@ Restart:
 		call	Cls
                 xra a
                 sta framecnt
+
+                call stars_init
+
+                call intro
+                
+                call colors_blackout
+                lxi h, colors_buf+15
+                call colorset
 
                 ; нарисовать перспективные линии уходящие вдаль
                 call scan_fanout		
@@ -46,9 +57,6 @@ prefill_L1:
 		dcr c
 		jnz prefill_L1
 
-                ; развернуть текстуры с маской для скроллера
-                call prepare_textures
-
                 ; нарисовать большую надпись внизу HARZAKC
                 mvi c, $40
                 mvi a, $c0      ; 
@@ -62,8 +70,7 @@ prefill_L1:
                 lxi d, harzakc1
                 call varblit
 
-
-                ; верхние линии
+                ; небо
                 call drawsky
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -78,16 +85,13 @@ prefill_L1:
                 call gigachad_enable
                 call gigachad_precharge
 
-                ;lxi h, colors_main+15
-                ;call colorset
-
                 call colors_blackout
                 mvi a, OPCODE_STC
                 sta fade_in_flag
 
                 call msgseq_init
 
-                ; все тяжкие: основной цикл и даже музыка без синхронизации
+                ; основной цикл
 foreva:
                 call rnd16
 
@@ -124,12 +128,15 @@ az_L2
                 rar
                 push psw
 
-                jnc az_L3x
+                jnc az_L3x_nosync
+                ; TODO: засунуть сюда fade-in!
+                ; мы тут тратим за зря ~2000 тактов (иногда все 10, но за это ручаться нельзя)
+                call stars_x
                 ei              ; sync before white
                 hlt
-az_L3x
-
+az_L3x_nosync
                 jc az_L3        ; odd frame -> white
+
                 mvi a, $e0
                 sta varblit_plane
                 lxi d, varplane1  ; even frame -> red/yellow
@@ -180,6 +187,81 @@ fade_in_flag    stc
                 sta fade_in_flag
 		jmp foreva
 
+
+
+;;; INTRO 
+                ; лохотип фестиваля
+intro:
+                ; заблокировать trollsky
+                mvi a, $c9
+                sta trollsky
+
+                mvi a, $c0
+                sta varblit_plane
+                lxi d, undefined
+                mvi c, $c0
+                call varblit
+
+                ; восстановить trollsky
+                xra a
+                sta trollsky
+                
+
+                lxi h, $0a20
+                call gotoxy
+                
+                lxi h, msg_demoskene
+                call puts
+                
+                ; intro fade in
+                call colors_blackout
+                mvi c, 28 ;; очень быстро
+intro_L1:
+                mvi a, $3
+                ana c
+                push b
+                cz clrs_fadetomain
+                lxi h, colors_buf+15
+                call colorset
+                pop b
+                dcr c
+                jnz intro_L1        
+
+
+                ; intro fade out
+                mvi d, PixelMask >> 8
+                lxi b, $ffc0
+                lxi h, -1
+                shld rnd16+1
+intro_L2:
+                call rnd16
+                lhld rnd16+1
+intro_L3:
+                mvi a, 7
+                ana h
+                mov e, a  ; e = x % 8
+                xra h     ; set bits $f8
+                rar \ rar \ rar \ add c
+                mov h, a
+
+                ldax d
+                cma
+                ana m
+                mov m, a
+
+                call rnd16
+                lhld rnd16+1
+
+                ; finish when rnd16 == $ffff
+                mov a, h
+                ana l
+                cmp b
+                jnz intro_L3
+
+                ret
+
+
+
 arzakdy         db 1
 arzaky          db $0
 framecnt        db 0
@@ -194,20 +276,17 @@ skylines:       db $75, $00, $58,  $75, $60, $70,   $75, $90, $ff
                 db $80, $00, $47,  $80, $4c, $54,   $80, $98, $9c,  $80, $a0, $ff
                 db $88, $00, $40,   $88, $9b, $a3,  $88, $aa, $ff
                 db $96, $00, $40,   $96, $a8, $ff
-                ;;db $b7, $00, $60, $b7, $90, $ff
                 db $b7, $00, $4a,  $b7, $50, $60,   $b7, $8c, $94, $b7, $9a, $ff
                 db $e0, $00, $08, $e0, $3a, $42,  $e0, $46, $ca,   $e0, $d0, $e0
                 db 0
 
 skylines_white:
-               ;db $73, $00, $58,   $73, $a0, $ff
                db $73, $00, $ff
-               db $75, $00, $4e,   $75, $a0, $ff
+               ;db $75, $00, $4e,   $75, $a0, $ff
+               db $75, $00, $40,  $75, $45, $4e,  $75, $b0, $b8,  $75, $bd, $ff
                db 0
 
 skylines_red:
-               ;db $73, $00, $58,   $73, $a0, $ff
-               ;db $74, $00, $ff
                db $75, $00, $4e,   $75, $a0, $ff
                db $77, $00, $38,   $77, $a8, $ff
                db $7c, $00, $48,   $7c, $a0, $a8,  $7c, $b0, $ff
@@ -242,6 +321,7 @@ trolltbl:
               ; за лучом (слишком низко в кадре) и получается мерцание
               ; см troll_hook
 trollsky:       
+              nop   ;; can be ret/c9
               mvi a, $c0
               sta hline_xy+1
 
@@ -297,6 +377,142 @@ drawsky_L1:
                 call hline_xy
                 pop h
                 jmp drawsky_L1
+
+
+star_xy         dw 0, 0, 0, 0
+                dw 0, 0, 0, 0
+                dw 0, 0, 0, 0
+star_xy_end
+star_ptr        dw star_xy
+
+stars_init:     lxi h, star_xy
+                shld star_ptr
+                ret
+
+stars_x:        push psw
+                push h
+                push d
+                push b
+
+                ;lda framecnt
+                ;ani $f
+                ;cpi $f
+                ;jnz stars_x_nah
+
+                lhld star_ptr
+                mov e, m
+                inx h
+                mov d, m
+                xchg
+                call clearpixel
+
+                call rnd16
+                lhld star_ptr
+                lda rnd16+1
+                ori $80
+                mov m, a
+                mov e, a
+                inx h
+                lda rnd16+2
+                mov m, a
+                mov d, a
+                inx h
+
+                mvi a, star_xy_end & 255
+                cmp l
+                jnz stars_x_L1
+                mvi a, star_xy_end >> 8
+                cmp h
+                jnz stars_x_L1
+                lxi h, star_xy
+stars_x_L1:
+                shld star_ptr
+            
+                xchg
+                call setpixel
+                
+stars_x_nah:
+                pop b
+                pop d
+                pop h
+                pop psw
+                ret
+              
+
+stars: 
+                push psw
+                push h
+                push d
+                push b
+
+                lda framecnt
+                ani $f
+                cpi $f
+                jnz stars_nah
+
+                lhld star_xy
+                call xorpixel
+                lhld rnd16+1
+                mov a, l
+                ori $80
+                mov l, a
+                shld star_xy
+                call xorpixel
+stars_nah:
+                pop b
+                pop d
+                pop h
+                pop psw
+                ret
+
+xorpixel      
+                mvi c, $c0
+                mvi d, PixelMask >> 8
+
+                mvi a, 7
+                ana h
+                mov e, a
+                xra h
+                rar \ rar \ rar \ add c
+                mov h, a
+
+                ldax d
+                xra m
+                mov m, a
+                ret
+
+setpixel      
+                mvi c, $c0
+                mvi d, PixelMask >> 8
+
+                mvi a, 7
+                ana h
+                mov e, a
+                xra h
+                rar \ rar \ rar \ add c
+                mov h, a
+
+                ldax d
+                ora m
+                mov m, a
+                ret
+
+clearpixel      
+                mvi c, $c0
+                mvi d, PixelMask >> 8
+
+                mvi a, 7
+                ana h
+                mov e, a
+                xra h
+                rar \ rar \ rar \ add c
+                mov h, a
+
+                ldax d
+                cma
+                ana m
+                mov m, a
+                ret
                 
 spark_xy        dw 0
 
@@ -933,9 +1149,6 @@ INITPHASE       equ $6000 ; $7800
 TEX_PLANE       equ $c0
 precalc_rails:
                 lxi h, DXBASE; $c0/2 ; $10;$20
-                lxi b, DXSTEP
-                push h
-                push b
                 shld crail_dx
 
                 mvi a, YOFFS
@@ -943,77 +1156,31 @@ precalc_rails:
                 lxi h, scroll_rail
                 shld crail_railptr
 
+                mvi c, 6
+precalc_rails_L1:
+                push b
+
                 call calc_rail
 
-                pop b
-                pop h
+                ; next scroll_rail
+                lhld crail_railptr
+                inr h
+                shld crail_railptr
+
+                ; next crail_constofs
+                lda crail_constofs
+                adi 3
+                sta crail_constofs
+
+                ; next crail_dx
+                lxi b, DXSTEP
+                lhld crail_dx
                 dad b
-                push h
-                push b
                 shld crail_dx
 
-                mvi a, YOFFS + 3*1
-                sta crail_constofs
-                lxi h, scroll_rail + 256*1
-                shld crail_railptr
-                call calc_rail
-
                 pop b
-                pop h
-                dad b
-                push h
-                push b
-                shld crail_dx
-
-
-                mvi a, YOFFS + 3*2
-                sta crail_constofs
-                lxi h, scroll_rail + 256*2
-                shld crail_railptr
-                call calc_rail
-
-                pop b
-                pop h
-                dad b
-                push h
-                push b
-                shld crail_dx
-
-
-                mvi a, YOFFS + 3*3
-                sta crail_constofs
-                lxi h, scroll_rail + 256*3
-                shld crail_railptr
-                call calc_rail
-
-                pop b
-                pop h
-                dad b
-                push h
-                push b
-                shld crail_dx
-
-                mvi a, YOFFS + 3*4
-                sta crail_constofs
-                lxi h, scroll_rail + 256*4
-                shld crail_railptr
-                call calc_rail
-
-                pop b
-                pop h
-                dad b
-                push h
-                push b
-                shld crail_dx
-
-                mvi a, YOFFS + 3*5
-                sta crail_constofs
-                lxi h, scroll_rail + 256*5
-                shld crail_railptr
-                call calc_rail
-
-                pop b
-                pop h
+                dcr c
+                jnz precalc_rails_L1
 
                 ret
 
@@ -1436,7 +1603,8 @@ clrs_ftm_L1:
 colorset:
                 ei
                 hlt
-		mvi	a, 88h
+colorset_nowait:
+                mvi	a, 88h
 		out	0
 		mvi	c, 15
 colorset1:	mov	a, c
@@ -1484,6 +1652,10 @@ persp_tab       db 0, 5, 8, 12, 15, 18, 21, 24, 26, 29, 31, 33, 36, 38, 40, 42, 
 ; HARZAKC
 .include harzakc.inc
 
+; undefined logo
+.include undefined.inc
+
+msg_demoskene  .db 'SUMMER 2022', 0
 
 msgseq_ctr     .db 0
 
