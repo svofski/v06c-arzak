@@ -60,7 +60,7 @@ gigachad_init:
                 call scheduler_init
                 call gigachad_disable
 
-                mvi a, -16
+                mvi a, -15
                 sta ay_nline
                 mvi a, -1
                 sta gigachad_nfrm
@@ -141,6 +141,11 @@ gigachad_wrap:
                 ;; load song pointers
                 mvi a, OPCODE_ORA_A
                 sta gigachad_wrap_flag
+
+                mvi a, -15
+                sta ay_nline
+                mvi a, -1
+                sta gigachad_nfrm
 
                 lhld recreate_sptr
                 call create_song_tasks

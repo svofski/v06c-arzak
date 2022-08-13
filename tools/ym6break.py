@@ -11,6 +11,8 @@ import sys
 import os
 from subprocess import Popen, PIPE
 from utils import *
+import lhafile      # pip3 install lhafile
+import io
 
 TOOLS = './tools/'
 SALVADOR = TOOLS + 'salvador.exe'
@@ -27,41 +29,50 @@ def drop_comment(f):
     return comment
 
 def readym(filename):
-    with open(filename, "rb") as f:
-        hdr = f.read(12) # YM6!LeOnArD!               # 12
-        nframes = struct.unpack(">I", f.read(4))[0]      # 16
+    try:
+        lf = lhafile.Lhafile(filename)
+        data = lf.read(lf.namelist()[0])
+        f = io.BytesIO(data)
+    except:
+        f = open(filename, "rb")
 
-        print("YM6 file has ", nframes, " frames")
+    hdr = f.read(12) # YM6!LeOnArD!               # 12
+    print('hdr=', hdr)
+    nframes = struct.unpack(">I", f.read(4))[0]      # 16
 
-        attrib = struct.unpack(">I", f.read(4))       # 20
-        digidrums = struct.unpack(">h", f.read(2))    # 22
-        masterclock = struct.unpack(">I", f.read(4))  # 26
-        framehz = struct.unpack(">h", f.read(2))      # 28
-        loopfrm = struct.unpack(">I", f.read(4))      # 32
-        f.read(2) # additional data                   # 34
-        print("Masterclock: ", masterclock, "Hz")
-        print("Frame: ", framehz, "Hz")
+    print("YM6 file has ", nframes, " frames")
 
-        # skip digidrums but we don't do that here..
+    attrib = struct.unpack(">I", f.read(4))       # 20
+    digidrums = struct.unpack(">h", f.read(2))    # 22
+    masterclock = struct.unpack(">I", f.read(4))  # 26
+    framehz = struct.unpack(">h", f.read(2))      # 28
+    loopfrm = struct.unpack(">I", f.read(4))      # 32
+    f.read(2) # additional data                   # 34
+    print("Masterclock: ", masterclock, "Hz")
+    print("Frame: ", framehz, "Hz")
 
-        comment1 = drop_comment(f)
-        comment2 = drop_comment(f)
-        comment3 = drop_comment(f)
+    # skip digidrums but we don't do that here..
 
-        regs=[]
-        for i in range(16):
-            complete = list(f.read(nframes))
-            chu = chunker(complete, 2)
-            #decimated = [x if x < y else y for x, y in chu]
-            #decimated = complete[::2]
-            #decimated = [x if x != 255 else y for x, y in chu]
-            decimated = complete
-            #print(f'complete[{i}]=', complete)
-            #print(f'decimated[{i}]=', decimated)
-            decbytes = bytes(decimated)
-            regs.append(decbytes)  ## brutal decimator
+    comment1 = drop_comment(f)
+    comment2 = drop_comment(f)
+    comment3 = drop_comment(f)
 
-        return [regs, comment1, comment2, comment3]
+    regs=[]
+    for i in range(16):
+        complete = list(f.read(nframes))
+        chu = chunker(complete, 2)
+        #decimated = [x if x < y else y for x, y in chu]
+        #decimated = complete[::2]
+        #decimated = [x if x != 255 else y for x, y in chu]
+        decimated = complete
+        #print(f'complete[{i}]=', complete)
+        #print(f'decimated[{i}]=', decimated)
+        decbytes = bytes(decimated)
+        regs.append(decbytes)  ## brutal decimator
+
+    f.close()
+
+    return [regs, comment1, comment2, comment3]
 
 try:
     ymfile = sys.argv[1]

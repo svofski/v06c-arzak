@@ -92,7 +92,7 @@ foreva:
                 call rnd16
 
                 call persplines
-                
+
                 lxi h, framecnt
                 mov a, m
                 inr m
@@ -124,12 +124,23 @@ az_L2
                 rar
                 push psw
 
+                jnc az_L3x
+                ei              ; sync before white
+                hlt
+az_L3x
+
                 jc az_L3        ; odd frame -> white
                 mvi a, $e0
                 sta varblit_plane
                 lxi d, varplane1  ; even frame -> red/yellow
 az_L3
+                ;mvi a, 15
+                ;out 2
+
                 call varblit
+                ;mvi a, 0
+                ;out 2
+
 
                 ; выравниваем медленный-быстрый кадры
                 ; два гигачада ~6500 + в быстрый кадр
@@ -179,7 +190,7 @@ texlinecnt      db 0
                 ; b = x1, c = x2
 
 skylines:       db $75, $00, $58,  $75, $60, $70,   $75, $90, $ff
-                db $7a, $00, $52,   $7a, $98, $ff
+                db $79, $00, $52,   $79, $98, $ff
                 db $80, $00, $47,  $80, $4c, $54,   $80, $98, $9c,  $80, $a0, $ff
                 db $88, $00, $40,   $88, $9b, $a3,  $88, $aa, $ff
                 db $96, $00, $40,   $96, $a8, $ff
@@ -188,8 +199,94 @@ skylines:       db $75, $00, $58,  $75, $60, $70,   $75, $90, $ff
                 db $e0, $00, $08, $e0, $3a, $42,  $e0, $46, $ca,   $e0, $d0, $e0
                 db 0
 
+skylines_white:
+               ;db $73, $00, $58,   $73, $a0, $ff
+               db $73, $00, $ff
+               db $75, $00, $4e,   $75, $a0, $ff
+               db 0
+
+skylines_red:
+               ;db $73, $00, $58,   $73, $a0, $ff
+               ;db $74, $00, $ff
+               db $75, $00, $4e,   $75, $a0, $ff
+               db $77, $00, $38,   $77, $a8, $ff
+               db $7c, $00, $48,   $7c, $a0, $a8,  $7c, $b0, $ff
+               db $84, $00, $26,   $84, $30, $40,  $84, $a8, $bf,  $84, $d0, $ff
+               db $8f, $00, $30,   $8f, $b0, $b6,  $8f, $c8, $ff
+               db 0
+               
+trolltbl:
+              db $50, $64,  $94, $98,    0, 0, 0, 0  ; -8
+              db $50, $64,  $93, $98,    0, 0, 0, 0  ; -7
+              db $50, $64,  $92, $98,    0, 0, 0, 0  ; -6
+              db $50, $64,  $91, $98,    0, 0, 0, 0  ; -5
+              db $50, $65,  $90, $98,    0, 0, 0, 0  ; -4
+              db $50, $65,  $90, $98,    0, 0, 0, 0  ; -3  
+              db $50, $66,  $8f, $98,    0, 0, 0, 0  ; -2
+              db $50, $66,  $8f, $98,    0, 0, 0, 0  ; -1
+              
+              db $50, $67,  $8e, $98,    0, 0, 0, 0  
+              db $50, $67,  $8e, $98,    0, 0, 0, 0  
+              db $50, $68,  $8d, $98,    0, 0, 0, 0  
+              db $50, $69,  $8d, $98,    0, 0, 0, 0  
+              db $50, $6a,  $8c, $98,    $75, $76, 0, 0  
+              db $50, $6a,  $8c, $98,    $74, $77, 0, 0  
+              db $50, $6b,  $8b, $98,    $74, $77, 0, 0  
+              db $50, $6b,  $8b, $98,    $73, $78,  0, 0  
+              db $50, $6b,  $8b, $98,    $73, $78, 0, 0  
+
+              ; хитрость -- рисуем белые линии на горизонте
+              ; вокруг хобота птероида итд, смотрится как будто
+              ; весь огромный спрайт выводится с маской
+              ; это надо делать синхронно с птероидом, иначе мы опаздываем 
+              ; за лучом (слишком низко в кадре) и получается мерцание
+              ; см troll_hook
+trollsky:       
+              mvi a, $c0
+              sta hline_xy+1
+
+              lda arzaky; -8..8
+              adi 8
+              add a
+              add a
+              add a
+              adi trolltbl & $ff
+              mov l, a
+              mvi a, trolltbl >> 8
+              aci 0
+              mov h, a
+ts_L1:              
+              mov a, m
+              ora a
+              rz
+              inx h
+              mov b, a
+              mov c, m \ inx h
+              mvi a, $73
+              push h
+              call hline_xy
+              pop h
+              jmp ts_L1
+              
+
 drawsky:
+                mvi a, $c0 ; white
+                sta hline_xy+1
+                lxi h, skylines_white
+                call drawsky_L1
+
+                mvi a, $e0 ; red
+                sta hline_xy+1
+                lxi h, skylines_red
+                call drawsky_L1
+
+
+                mvi a, $a0
+                sta hline_xy+1
                 lxi h, skylines
+                call drawsky_L1
+                ret
+                
 drawsky_L1:
                 mov a, m \ inx h
                 ora a
@@ -562,7 +659,6 @@ draw_next_y:
                 cmp d           ; compare new to old in d
                 jm end_draw
 fill_color:     mvi b, 0
-                ;call hline
                 
                 ;; inline hline
                 lxi h, $8000
@@ -599,8 +695,11 @@ end_draw:
                 
 
 scan_fanout:
+                ; чтобы точно была плоскость A0 после рестарта
+                mvi a, $a0
+                sta hline_xy+1
                 
-		; try a dumb and full of cum way of drawing fanning stripes
+		; dumb and full of cum way of drawing fanning stripes
 
                 mvi a, 114
                 sta line_y0
@@ -695,31 +794,32 @@ persp_y         push h
                 pop h
                 ret
                 
-                ; fill full horizontal line
-                ; b = bitmap
-                ; a = y
-                ; CLOBBERS: hl 
-hline           
-                lxi h, $8000
-                add l
-                mov l, a
-                mov m, b \ inr h \ mov m, b \ inr h
-                mov m, b \ inr h \ mov m, b \ inr h
-                mov m, b \ inr h \ mov m, b \ inr h
-                mov m, b \ inr h \ mov m, b \ inr h
-                mov m, b \ inr h \ mov m, b \ inr h
-                mov m, b \ inr h \ mov m, b \ inr h
-                mov m, b \ inr h \ mov m, b \ inr h
-                mov m, b \ inr h \ mov m, b \ inr h
-                mov m, b \ inr h \ mov m, b \ inr h
-                mov m, b \ inr h \ mov m, b \ inr h
-                mov m, b \ inr h \ mov m, b \ inr h
-                mov m, b \ inr h \ mov m, b \ inr h
-                mov m, b \ inr h \ mov m, b \ inr h
-                mov m, b \ inr h \ mov m, b \ inr h
-                mov m, b \ inr h \ mov m, b \ inr h
-                mov m, b \ inr h \ mov m, b ;\ inr h
-                ret
+; inlined in persplines
+;                ; fill full horizontal line
+;                ; b = bitmap
+;                ; a = y
+;                ; CLOBBERS: hl 
+;hline           
+;                lxi h, $8000
+;                add l
+;                mov l, a
+;                mov m, b \ inr h \ mov m, b \ inr h
+;                mov m, b \ inr h \ mov m, b \ inr h
+;                mov m, b \ inr h \ mov m, b \ inr h
+;                mov m, b \ inr h \ mov m, b \ inr h
+;                mov m, b \ inr h \ mov m, b \ inr h
+;                mov m, b \ inr h \ mov m, b \ inr h
+;                mov m, b \ inr h \ mov m, b \ inr h
+;                mov m, b \ inr h \ mov m, b \ inr h
+;                mov m, b \ inr h \ mov m, b \ inr h
+;                mov m, b \ inr h \ mov m, b \ inr h
+;                mov m, b \ inr h \ mov m, b \ inr h
+;                mov m, b \ inr h \ mov m, b \ inr h
+;                mov m, b \ inr h \ mov m, b \ inr h
+;                mov m, b \ inr h \ mov m, b \ inr h
+;                mov m, b \ inr h \ mov m, b \ inr h
+;                mov m, b \ inr h \ mov m, b ;\ inr h
+;                ret
 
                 ; fast fill horizontal segment
                 ; a = y
@@ -761,7 +861,6 @@ hline_xy_L2:
                 dcr c
                 rz
                 
-                ; todo: fill right-to-left and use ivagor's dad h to rlc in hl
                 mov a, d        ; mask
                 rrc
                 mov d, a
@@ -775,6 +874,7 @@ hline_xy_L3:
                 
                 ; do in chunks
                 mov c, a
+hline_xy_bitmap equ $+1
                 mvi m, $ff
                 jnz hline_xy_L3
                 ret
@@ -1162,6 +1262,7 @@ varblit:
                 xchg
                 sphl
         
+                ;mvi d, 80
                 mov l, c
 vb_L0:                
                 pop b   ; c = first column, b = number of 2-column chunks (0-16)
@@ -1199,54 +1300,53 @@ vbline_16:      pop b \ mov m, c \ inr h \ mov m, b \ inr h
                 
 vb_L2:          ; next line
                 dcr l
+
+                mvi a, -$73
+                add l             ; перед строкой 73 очистить края вокруг будто маска
+                jz troll_clearhook
+                inr a
+                jz troll_hook     ; после строки 73 нарисовать белый горизонт вокруг птероида
+
+vb_L3:
                 jmp vb_L0
 
 vb_exit:                
 varblit_sp      equ $+1
                 lxi sp, 0
-                ;ei
                 ret
 
-;;                ;mvi a, height
-;;                ;lxi b, $e080
-;;                ;lxi d, plane1
-;;blit:           ;di
-;;                lxi h, 0
-;;                dad sp
-;;                shld blit_sp
-;;                xchg
-;;                sphl
-;;                
-;;                ; 32 columns
-;;                mov h, b
-;;                mov l, c
-;;                
-;;                lxi d, -8192
-;;blit_L1                
-;;                pop b \ mov m, c \ inr h \ mov m, b \ inr h 
-;;                pop b \ mov m, c \ inr h \ mov m, b \ inr h 
-;;                pop b \ mov m, c \ inr h \ mov m, b \ inr h 
-;;                pop b \ mov m, c \ inr h \ mov m, b \ inr h 
-;;                pop b \ mov m, c \ inr h \ mov m, b \ inr h 
-;;                pop b \ mov m, c \ inr h \ mov m, b \ inr h 
-;;                pop b \ mov m, c \ inr h \ mov m, b \ inr h 
-;;                pop b \ mov m, c \ inr h \ mov m, b \ inr h 
-;;                pop b \ mov m, c \ inr h \ mov m, b \ inr h 
-;;                pop b \ mov m, c \ inr h \ mov m, b \ inr h 
-;;                pop b \ mov m, c \ inr h \ mov m, b \ inr h 
-;;                pop b \ mov m, c \ inr h \ mov m, b \ inr h 
-;;                pop b \ mov m, c \ inr h \ mov m, b \ inr h 
-;;                pop b \ mov m, c \ inr h \ mov m, b \ inr h 
-;;                pop b \ mov m, c \ inr h \ mov m, b \ inr h 
-;;                pop b \ mov m, c \ inr h \ mov m, b \ inr h 
-;;                dad d
-;;                dcr l
-;;                dcr a
-;;                jnz blit_L1
-;;                
-;;blit_sp         equ $+1
-;;                lxi sp, 0
-;;                ret
+vb_hl:          dw 0
+troll_hook:
+                shld vb_hl
+                lxi h, 0
+                dad sp
+                shld trollhook_sp
+                lhld varblit_sp
+                sphl
+
+                call trollsky
+                lhld vb_hl
+
+trollhook_sp    equ $+1
+                lxi sp, 0
+                jmp vb_L3
+
+troll_clearhook:
+                mvi a, $e0
+                cmp h
+                jm vb_L3
+                shld vb_hl
+                lxi h, $ca73
+                xra a
+                mov m, a \ inr h \ mov m, a \ inr h \ mov m, a
+
+                inr h \ inr h \ inr h \ inr h
+                mov m, a \ inr h \ mov m, a \ inr h \ mov m, a
+                
+
+
+                lhld vb_hl
+                jmp vb_L3
 
 
 		; выход:
