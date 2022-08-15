@@ -349,6 +349,7 @@ ts_L1:
               jmp ts_L1
               
 
+              ; статическое небо
 drawsky:
                 mvi a, $c0 ; white
                 sta hline_xy+1
@@ -360,8 +361,7 @@ drawsky:
                 lxi h, skylines_red
                 call drawsky_L1
 
-
-                mvi a, $a0
+                mvi a, $a0  ; floor
                 sta hline_xy+1
                 lxi h, skylines
                 call drawsky_L1
@@ -379,6 +379,8 @@ drawsky_L1:
                 jmp drawsky_L1
 
 
+                ; звезды в небе
+                ; звезд столько, сколько зарезервировано координат от star_xy star_xy_end
 star_xy         dw 0, 0, 0, 0
                 dw 0, 0, 0, 0
                 dw 0, 0, 0, 0
@@ -394,29 +396,24 @@ stars_x:        push psw
                 push d
                 push b
 
-                ;lda framecnt
-                ;ani $f
-                ;cpi $f
-                ;jnz stars_x_nah
-
-                lhld star_ptr
+                lhld star_ptr       ; hl = &текущая звездочка xy
                 mov e, m
                 inx h
-                mov d, m
-                xchg
-                call clearpixel
+                mov d, m            
+                xchg                ; hl = текущая звездочка xy
+                call clearpixel     ; clearpixel(xy)
 
-                call rnd16
-                lhld star_ptr
+                call rnd16          ; новая координата
+                lhld star_ptr       ; hl = &xy
                 lda rnd16+1
-                ori $80
-                mov m, a
-                mov e, a
+                ori $80             ; y |= $80 - всегда в верхней половине экрана
+                mov m, a            ; 
+                mov e, a            ; e = y
                 inx h
                 lda rnd16+2
                 mov m, a
                 mov d, a
-                inx h
+                inx h               ; *xy++ = de = xy
 
                 mvi a, star_xy_end & 255
                 cmp l
@@ -424,12 +421,12 @@ stars_x:        push psw
                 mvi a, star_xy_end >> 8
                 cmp h
                 jnz stars_x_L1
-                lxi h, star_xy
+                lxi h, star_xy      ; if (xy == stars_xy_end) xy = &stars_xy[0]
 stars_x_L1:
                 shld star_ptr
             
                 xchg
-                call setpixel
+                call setpixel       ; setpixel(xy)
                 
 stars_x_nah:
                 pop b
@@ -463,22 +460,6 @@ stars_nah:
                 pop d
                 pop h
                 pop psw
-                ret
-
-xorpixel      
-                mvi c, $c0
-                mvi d, PixelMask >> 8
-
-                mvi a, 7
-                ana h
-                mov e, a
-                xra h
-                rar \ rar \ rar \ add c
-                mov h, a
-
-                ldax d
-                xra m
-                mov m, a
                 ret
 
 setpixel      
@@ -1145,7 +1126,7 @@ prails_L1:
 DXBASE          equ $c0 ; /2  - сократили inx b в выводе текстуры
 DXSTEP          equ 7;10
 YOFFS           equ 0 ; -16
-INITPHASE       equ $6000 ; $7800
+INITPHASE       equ $6080 ; $7800
 TEX_PLANE       equ $c0
 precalc_rails:
                 lxi h, DXBASE; $c0/2 ; $10;$20
@@ -1717,7 +1698,8 @@ msgseq_L2:
                 ;          12345678901234567890123456789012
 
 msg0            ;.db 1, $d4, 0
-                ;.db 1, 'M', 20, 'BIUS  MOEBIUS', 0
+                ;.db 1,   '    ',3,' ',3,' ',3,'   GREETS   ',3,' ',3,' ',3,'  !', 0
+
                 ;.db 1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
                 ;.db    16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 0
                 .db 80,   '      ARZAK EST UN MONDE ...    ', 0
@@ -1729,8 +1711,23 @@ msg0            ;.db 1, $d4, 0
                 .db 15,   '                                ', 0
                 .db 5,    '        ARZACH BY M',20,'BIUS       ', 0
                 .db 15,   '                                ', 0
-                .db 80,  ' A VECTOR-06C DEMO BY SVO',1,' 2022  ', 0
+                .db 80,   ' A VECTOR-06C DEMO BY SVO',1,' 2022  ', 0
                 .db 50,   '                                ', 0
+
+                .db 1,    '  DESASTER ',3,' ERRORSOFT ',3,' FIXEL  ', 0
+                .db 1,    '    FROG ',3,' IVAGOR ',3,' KANSOFT     ', 0
+                .db 1,    ' LAFROMM31 ',3,' MANWE ',3,' METAMORPHO ', 0
+                .db 1,    '      NZEEMIN ',3,' PYK ',3,' TNT23     ', 0
+
+
+                ;.db 1,    '   ERRORSOFT ',3,' FROG ',3,' IVAGOR ', 0
+                ;.db 1,    '  LAFROMM31 ',3,' MANWE ',3,' NZEEMIN   ', 0
+                ;.db 1,    '   METAMORPHO ',3,' PYK ',3,' TNT23   ', 0
+                .db 1,    ' ',3,' ',3,' ',3, '   RETROTECHSQUAD   ',3,' ',3,' ',3,'    ',0
+                .db 1,    ' ',3,' ',3,' ',3, '  UNDEFINED ORGAZ!  ',3,' ',3,' ',3,'    ',0
+                .db 50,   '                                ', 0
+                .db 220,  '                                ', 0
+
                 .db 0
 
 .include font8x8.asm
