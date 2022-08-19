@@ -202,6 +202,7 @@ ay_noise_louder
                 jmp ay_outde
 		;ret
 
+#ifndef RSOUND
 ay_send_user:
                 lxi h, ay_nline
                 ; send from buffers to AY regs
@@ -226,7 +227,40 @@ ay_send_L2
                 dcr e
                 jp ay_send_L1
                 ret
+#else
+                ; R-Sound 
+ay_send_user:
+                lxi h, ay_nline
+                ; send from buffers to AY regs
+                ; m = line number 
+                ; reg13 (envelope shape) is special: $ff means no change / don't write
+ay_send         
+                mvi a, $88
+                out 4
+
+                mvi e, 13
+                ;lxi b, ay_line+13
+                mov c, m                
+                mvi b, (buffer00 >> 8) + 13 ; last column
                 
+                ldax b
+                cpi $ff
+                jz ay_send_L2           ; no touchy fishy
+ay_send_L1                
+                ; ay reg = e
+                mov a, e
+                out 6
+                mvi a, 6 \ out 5 \ xra a \ out 5  ; strobe ctrl
+
+                ldax b
+                out 6                   ; data
+                mvi a, 4 \ out 5 \ xra a \ out 5  ; strobe ctrl
+ay_send_L2                
+                dcr b                   ; prev column
+                dcr e
+                jp ay_send_L1
+                ret
+#endif                
                 
 scheduler_init:
                 lxi h, context

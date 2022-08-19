@@ -47,7 +47,7 @@ if ! test -e undefined.inc ; then
     tools/png2db-arzak.py undefined.png -lineskip 1 -leftofs 5 -nplanes 1 -labels undefined >undefined.inc
 fi
 
-$PASM $MAIN.asm -o $ROM
+$PASM -DRSOUND=1 $MAIN.asm -o $ROM
 ROM_SZ=`cat $ROM | wc -c`
 echo "$ROM: $ROM_SZ octets"
 
