@@ -1,0 +1,25 @@
+ARZAK  - a demo for Vector-06c by svo 2022
+
+Presented at Undefined Summer 2022
+
+Music: Scalesman^MC - Melody in the air
+
+
+Requirements: 
+
+Plain Vector-06C, no kvaz required. 
+AY on ports $14/$15 for music.
+
+Just some code doodles that conveniently
+clumped up together to become a little intro.
+Probably my first v06c demo piece that does not
+involve hardware scrolling and is not strictly
+frame-locked.
+
+Files:
+
+arzak.rom
+arzak.wav - AY on ports 14,15 (Combodevice etc)
+
+arzak-rs.rom
+arzak-rs.wav - AY on PU (R-Sound)
