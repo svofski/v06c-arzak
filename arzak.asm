@@ -1,4 +1,10 @@
                 ; je m'appelle arzak
+                ; for Undefined Summer 2022
+                ; by svofski
+                ;
+                ; vector-06c, no kvaz, ay
+                ;
+
                 .project arzak.rom
                 .tape v06c-rom
 		.org 100h
@@ -59,24 +65,24 @@ prefill_L1:
 
                 ; нарисовать большую надпись внизу HARZAKC
                 mvi c, $40
-                mvi a, $c0      ; 
+                mvi a, $c0    ; плоскость c0 (белая)
                 sta varblit_plane
                 lxi d, harzakc0
                 call varblit
 
                 mvi c, $3f
-                mvi a, $e0      ; 
+                mvi a, $e0    ; плоскость e0 (красная)
                 sta varblit_plane
                 lxi d, harzakc1
                 call varblit
 
-                ; небо
+                ; статическая часть неба
                 call drawsky
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;    MAIN LOOP
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-                ;ei
+              ; ;;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;   ;;; ;;  `   .
+            ;;;  ;   MAIN LOOP    ;;; ;;  ;   .   '    `
+             ; ;; ;;;;  ;;;;;;;;;;;;;   ;;;;;;;  ;;  ;;; ;   ;     -    ,
+
                 di
 
                 ; загружаем и прокачиваем начало песенки
@@ -85,18 +91,21 @@ prefill_L1:
                 call gigachad_enable
                 call gigachad_precharge
 
-                call colors_blackout
+                call colors_blackout  ; BAM_TEMHO
                 mvi a, OPCODE_STC
-                sta fade_in_flag
+                sta fade_in_flag      ; включить fade in в начале основной сцены
 
-                call msgseq_init
+                call msgseq_init      ; перемотать текст в начало
 
-                ; основной цикл
+                ;;;;;;;;;;;;;;;;;;;;;;;;;;;
+                ;;     основной цикл     ;;
+                ;;;;;;;;;;;;;;;;;;;;;;;;;;;
 foreva:
                 call rnd16
 
-                call persplines
+                call persplines       ; горизонтальные линии шашечек
 
+                ; баунсим Арзака вверх-вниз
                 lxi h, framecnt
                 mov a, m
                 inr m
@@ -129,9 +138,9 @@ az_L2
                 push psw
 
                 jnc az_L3x_nosync
-                ; TODO: засунуть сюда fade-in!
+                ; TODO: засунуть сюда fade-in! -- -  ааа, ну его..
                 ; мы тут тратим за зря ~2000 тактов (иногда все 10, но за это ручаться нельзя)
-                call stars_x
+                call stars_x    ; звезды в небе
                 ei              ; sync before white
                 hlt
 az_L3x_nosync
@@ -171,11 +180,12 @@ az_L5
                 ; искорки на надписи 
                 call sparky
 
+                ; медленные тексты снизу экрана
                 call msgseq_frame
 
-fade_in_flag    stc
+fade_in_flag    stc                 ; SELFMOD: stc = enable fade-in
                 jnc foreva
-
+      
                 call clrs_fadetomain
                 lxi h, colors_buf+15
                 call colorset
@@ -189,7 +199,10 @@ fade_in_flag    stc
 
 
 
-;;; INTRO 
+                ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+                ;;;         INTRO PART          ;;;
+                ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
                 ; лохотип фестиваля
 intro:
                 ; заблокировать trollsky
@@ -198,19 +211,18 @@ intro:
 
                 mvi a, $c0
                 sta varblit_plane
-                lxi d, undefined
+                lxi d, undefined    ; 'Undefined' large picture
                 mvi c, $c0
                 call varblit
 
                 ; восстановить trollsky
                 xra a
                 sta trollsky
-                
 
                 lxi h, $0a20
                 call gotoxy
                 
-                lxi h, msg_demoskene
+                lxi h, msg_demoskene ; 'SUMMER 2022'
                 call puts
                 
                 ; intro fade in
@@ -227,8 +239,8 @@ intro_L1:
                 dcr c
                 jnz intro_L1        
 
-
                 ; intro fade out
+                ; рассеивание на манер мандрила
                 mvi d, PixelMask >> 8
                 lxi b, $ffc0
                 lxi h, -1
@@ -294,6 +306,7 @@ skylines_red:
                db $8f, $00, $30,   $8f, $b0, $b6,  $8f, $c8, $ff
                db 0
                
+              ; да, это вручную
 trolltbl:
               db $50, $64,  $94, $98,    0, 0, 0, 0  ; -8
               db $50, $64,  $93, $98,    0, 0, 0, 0  ; -7
@@ -311,7 +324,7 @@ trolltbl:
               db $50, $6a,  $8c, $98,    $75, $76, 0, 0  
               db $50, $6a,  $8c, $98,    $74, $77, 0, 0  
               db $50, $6b,  $8b, $98,    $74, $77, 0, 0  
-              db $50, $6b,  $8b, $98,    $73, $78,  0, 0  
+              db $50, $6b,  $8b, $98,    $73, $78, 0, 0  
               db $50, $6b,  $8b, $98,    $73, $78, 0, 0  
 
               ; хитрость -- рисуем белые линии на горизонте
@@ -349,7 +362,7 @@ ts_L1:
               jmp ts_L1
               
 
-              ; статическое небо
+                ; статическое небо
 drawsky:
                 mvi a, $c0 ; white
                 sta hline_xy+1
@@ -436,31 +449,31 @@ stars_x_nah:
                 ret
               
 
-stars: 
-                push psw
-                push h
-                push d
-                push b
-
-                lda framecnt
-                ani $f
-                cpi $f
-                jnz stars_nah
-
-                lhld star_xy
-                call xorpixel
-                lhld rnd16+1
-                mov a, l
-                ori $80
-                mov l, a
-                shld star_xy
-                call xorpixel
-stars_nah:
-                pop b
-                pop d
-                pop h
-                pop psw
-                ret
+;stars: 
+;                push psw
+;                push h
+;                push d
+;                push b
+;
+;                lda framecnt
+;                ani $f
+;                cpi $f
+;                jnz stars_nah
+;
+;                lhld star_xy
+;                call xorpixel
+;                lhld rnd16+1
+;                mov a, l
+;                ori $80
+;                mov l, a
+;                shld star_xy
+;                call xorpixel
+;stars_nah:
+;                pop b
+;                pop d
+;                pop h
+;                pop psw
+;                ret
 
 setpixel      
                 mvi c, $c0
@@ -497,6 +510,9 @@ clearpixel
                 
 spark_xy        dw 0
 
+                ;;
+                ;; Проблески на надписи HARZAKC
+                ;;
 sparky          
                 lda framecnt
                 ani $3
@@ -517,8 +533,10 @@ sparky
 
                 ret
 
+                ; буфер для сохранения фона под проблеском
 sparkle_back    ds 14
 
+                ; сохраняем фон, маскируем, рисуем + в белом фоне
 sparkle_save
                 lhld spark_xy
                 mvi a, $c0
@@ -580,13 +598,14 @@ sparkle_save
 
                 ret
 
+                ; восстанавливаем фон под блесткой
 sparkle_restore 
                 lhld spark_xy
-                mvi a, $c0
+                mvi a, $c0                  ; фон $c0 в hl
                 add h
                 mov h, a
 
-                mvi a, $20
+                mvi a, $20                  ; фон $e0 в de
                 add h
                 mov d, a
 
@@ -622,11 +641,15 @@ sparkle_restore
 
 
 
-                ; ; ; ; ; ; ; ; ; ; 
-                ; draw 6 textured sines
-                ; ; ; ; ; ; ; ; ; ;  
+                ; ; ; ; ; ; ; ; ; ; ; ; ; ;
+                ;   draw 6 textured sines
+                ; ; ; ; ; ; ; ; ; ; ; ; ; ;
 
-#ifdef ONETEXTURE
+#ifdef BYTE_TEXTURE
+
+; BYTE_TEXTURE uses one source texture, it's more compact but slow
+; so it's discarded
+
 
               ;lxi b, scroll_rail
               ;lxi d, texture
@@ -730,46 +753,46 @@ sf6_L1:
                 ret
 #else
 scrollerframe6
-                lxi b, scroll_rail
+              lxi b, scroll_rail
 
-                ; pick texture and offset
-                lxi d, texture_premasked
-                lda framecnt
-                mov h, a
-                ani $7f
-                add e
-                mov e, a
+              ; pick texture and offset
+              lxi d, texture_premasked
+              lda framecnt
+              mov h, a
+              ani $7f
+              add e
+              mov e, a
 
-                ; adjust for premasked texture: (framecnt & 3) * 6
-                mov a, h
-                ani 3 
-                ; a *= 6
-                add a 
-                mov h, a
-                add a
-                add h
-                ; d += (framecnt & 3) * 6
-                add d
-                mov d, a
+              ; adjust for premasked texture: (framecnt & 3) * 6
+              mov a, h
+              ani 3 
+              ; a *= 6
+              add a 
+              mov h, a
+              add a
+              add h
+              ; d += (framecnt & 3) * 6
+              add d
+              mov d, a
 
 sf6_L1:
-                push b
-                push d
+              push b
+              push d
 
-                call draw_tex_premasked
+              call draw_tex_premasked
 
-                pop d
-                inr d
-                pop b
-                inr b
-                mvi a, (scroll_rail>>8) + 6
-                cmp b
-                jnz sf6_L1
+              pop d
+              inr d
+              pop b
+              inr b
+              mvi a, (scroll_rail>>8) + 6
+              cmp b
+              jnz sf6_L1
 
-                ret
+              ret
 
               
-              ; 80000/97000 vs 9
+              ; вывод текстурированной линии: основа большого скроллера
 draw_tex_premasked:     
               lxi h, 0
               dad sp
@@ -819,8 +842,7 @@ dtexpre_L1:
 
               inr h
 
-
-              mvi a, TEX_PLANE + 32 ; $e0 ; $c0+$20
+              mvi a, TEX_PLANE + 32
               cmp h
               jnz dtexpre_L1
 draw_tex_premasked_sp: 
@@ -829,6 +851,9 @@ draw_tex_premasked_sp:
               
 
 #endif
+
+                ;; быстро рисуем горизонтальные линии, которые образуют
+                ;; шашечки, ксорясь (в палитре) с перспективными линиями
 persplines
                 mvi c, n_lines
 
@@ -890,7 +915,9 @@ end_draw:
                 jnz drawlines_L1
                 ret
                 
-
+                ;;
+                ;; медленно рисуем перспективные линии, уходящие вдаль
+                ;;
 scan_fanout:
                 ; чтобы точно была плоскость A0 после рестарта
                 mvi a, $a0
@@ -1018,9 +1045,14 @@ persp_y         push h
 ;                mov m, b \ inr h \ mov m, b ;\ inr h
 ;                ret
 
-                ; fast fill horizontal segment
-                ; a = y
-                ; b = x1, c = x2
+                ;; fast fill horizontal segment
+                ;; используется для:
+                ;;   - каждый кадр для отрезков линии горизонта за птероидом
+                ;;   - для рисования неба
+                ;;   - для рисования перспективных линий
+                ;;
+                ;; a = y
+                ;; b = x1, c = x2
 hline_xy           
                 mvi h, $a0
                 mov l, a
@@ -1121,6 +1153,9 @@ prails_L1:
                 ret
 #else
 
+                ;;
+                ;; прекалк красивых рельс для верхнего скроллера
+                ;;
 ;DXSTEP          equ 38 -- cool
                 ; приращение аргумента
 DXBASE          equ $c0 ; /2  - сократили inx b в выводе текстуры
@@ -1245,6 +1280,9 @@ texture1
 
 ptctr         db 0
 
+              ;;
+              ;; развернуть текстуры с маской для скроллера
+              ;; 6 строк, каждая с 4 сдвигами, 2 копии одна за другой для упрощения выборки
 prepare_textures:
               lxi d, texture_premasked
               mvi l, $c0
@@ -1395,13 +1433,16 @@ cls_sp:         lxi sp, 0
 
 
 
+                ; вывод спрайта в формате varblit:
+                ; db first_column, jump offset = (16 - end) * 5, data
+                ; db 255, 255 ; end of data
+                ;
                 ; di
                 ; mvi c, $d0
                 ; mvi a, $c0
                 ; sta varblit_plane
                 ; lxi d, varplane0
                 ; call varblit
-
 varblit:
                 ;di
                 lxi h, 0
@@ -1410,10 +1451,9 @@ varblit:
                 xchg
                 sphl
         
-                ;mvi d, 80
                 mov l, c
 vb_L0:                
-                pop b   ; c = first column, b = number of 2-column chunks (0-16)
+                pop b       ; c = first column, b = premultiplied jump offset = (16-end) * 5
                 mov a, b    ; end = 255, 255
                 ana c
                 jm vb_exit
@@ -1490,8 +1530,6 @@ troll_clearhook:
 
                 inr h \ inr h \ inr h \ inr h
                 mov m, a \ inr h \ mov m, a \ inr h \ mov m, a
-                
-
 
                 lhld vb_hl
                 jmp vb_L3
@@ -1625,12 +1663,13 @@ colors_main:
                 .db floor1, pic2, pic3, pic1
                 .db floor0, pic2, pic3, pic1
 
+                ; забыл точную формулу для этой таблицы...
 persp_tab       db 0, 5, 8, 12, 15, 18, 21, 24, 26, 29, 31, 33, 36, 38, 40, 42, 43, 45, 47, 48, 50, 51, 53, 54, 55, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 72, 73, 74, 75, 75, 76, 77, 77, 78, 78, 79, 80, 80, 81, 81, 82, 82, 83, 83, 84, 84, 85, 85, 86, 86, 87, 87, 87, 88, 88, 89, 89, 89, 90, 90, 90, 91, 91, 91, 92, 92, 92, 93, 93, 93, 94, 94, 94, 94, 95, 95, 95, 95, 96, 96, 96, 96, 97, 97, 97, 97, 98, 98, 98, 98, 99, 99, 99, 99, 99, 100, 100, 100, 100, 100, 101, 101, 101, 101, 101, 101, 102, 102, 102, 102, 102, 102, 103, 103, 103, 103, 103, 103, 104, 104, 104, 104, 104, 104, 104, 105, 105, 105, 105, 105, 105, 105, 105, 106, 106, 106, 106, 106, 106, 106, 106, 106, 107, 107, 107, 107, 107, 107, 107, 107, 107, 108, 108, 108, 108, 108, 108, 108, 108, 108, 108, 109, 109, 109, 109, 109, 109, 109, 109, 109, 109, 109, 110, 110, 110, 110, 110, 110, 110, 110, 110, 110, 110, 110, 110, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 112, 112, 112, 112, 112, 112, 112, 112, 112, 112, 112, 112, 112, 112, 112, 112, 113, 113, 113, 113, 113, 113, 113, 113, 113, 113, 113, 113, 113, 113, 113, 113, 113, 113, 114, 114, 114, 114, 114, 114
 
-; une planète, un système
+; une planète, un système, un homme avec son pteroïde blanc
 .include arzak.inc
 
-; HARZAKC
+; HARZAKC: le title sprite
 .include harzakc.inc
 
 ; undefined logo
@@ -1697,11 +1736,7 @@ msgseq_L2:
                   
                 ;          12345678901234567890123456789012
 
-msg0            ;.db 1, $d4, 0
-                ;.db 1,   '    ',3,' ',3,' ',3,'   GREETS   ',3,' ',3,' ',3,'  !', 0
-
-                ;.db 1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
-                ;.db    16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 0
+msg0            ; delay, message, 0
                 .db 80,   '      ARZAK EST UN MONDE ...    ', 0
                 .db 10,   '    UNE PLAN',$8a,'TE, UN SYSt', $8a, 'ME     ', 0
                 .db 20,   " MAIS C'EST AUSSI ET SURTOUT... ", 0
@@ -1720,9 +1755,6 @@ msg0            ;.db 1, $d4, 0
                 .db 1,    '      NZEEMIN ',3,' PYK ',3,' TNT23     ', 0
 
 
-                ;.db 1,    '   ERRORSOFT ',3,' FROG ',3,' IVAGOR ', 0
-                ;.db 1,    '  LAFROMM31 ',3,' MANWE ',3,' NZEEMIN   ', 0
-                ;.db 1,    '   METAMORPHO ',3,' PYK ',3,' TNT23   ', 0
                 .db 1,    ' ',3,' ',3,' ',3, '   RETROTECHSQUAD   ',3,' ',3,' ',3,'    ',0
                 .db 1,    ' ',3,' ',3,' ',3, '  UNDEFINED ORGAZ!  ',3,' ',3,' ',3,'    ',0
                 .db 50,   '                                ', 0

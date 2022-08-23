@@ -1,6 +1,31 @@
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;         GIGACHAD - 16       ;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;             GIGACHAD - 16          ;;;;;
+;;;;;  Packed AY/YM player by svofski  ;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+; Based on ZX0 8080 decoder by Ivan Gorodetsky - OLD FILE FORMAT v1 
+; Based on ZX0 z80 decoder by Einar Saukas
+;
+; This player unpacks 14 concurrent streams of AY register dumps.
+; Each tick it calls a task that unpacks 16 bytes of data. There are
+; 14 tasks in total. 
+
+; The song should be prepared as 14 streams of zx0 streams packed using
+; a 256-byte window. See ym6break.py.
+;
+; Source YM6 file should be interleaved. The easiest way to convert a pt3
+; song into YM6 is by using AY_Emul by Sergey Bulba. I used version v2.9 32.
+; Arkos Tracker II also can export interleaved YM6 files.
+;
+; In essence this is a minimal RTOS kernel with cooperative multitasking.
+; 14 tasks unpack 14 streams in 16-byte portions. To get a full register
+; set that could be sent to the AY, each task must be executed first.
+; 
+; During normal playback ay_send is called every frame. All 14 tasks 
+; are cycled every 16 frames, so 2 frames out of 16 are skipped.
+; 
+; The kernel is a hack, but it can be adapted to execute any tasks.
+
 
 OPCODE_STC      equ $37
 OPCODE_ORA_A    equ $B7
@@ -8,17 +33,21 @@ OPCODE_ORA_A    equ $B7
 ; total number of scheduler tasks                
 n_tasks         equ 14
 
-; task stack size 
+; task stack size (20 should be enough, erring on the safe side)
 task_stack_size equ 22
 
-            
+                ; pointer to the current stream in song array used by create_song_tasks
 create_sptr     dw 0
+                ; saved pointer to song arrayfor looping
 recreate_sptr   dw 0
-
+                ; finished tasks counter, used to detect song end
 dzx0_finish_ctr db 0
 
-                ; create 14 tasks for song
-                ; hl = address of array (song_00, song_01, ...song_13)
+                ;; Used internally by gigachad_init
+                ;; Do not call this procedure directly.
+                ;;
+                ;; create 14 tasks for song
+                ;; hl = address of array of 14 pointers to packed song data (song_00, song_01, ...song_13)
 create_song_tasks:
                 xra a
                 sta dzx0_finish_ctr
@@ -54,7 +83,10 @@ create_song_tasks_L1:
 
                 ret
 
-                ; hl = array of [song_00, song_01, ... song_13]
+                ;; gigachad_init
+                ;; Initialize player: create tasks and init scheduler.
+                ;; hl = array of 14 pointers to packed song data
+                ;;      [song_00, song_01, ... song_13]
 gigachad_init:
                 call create_song_tasks
                 call scheduler_init
@@ -70,16 +102,20 @@ gigachad_init:
 
                 ret
                 
+                ;; enable playback
 gigachad_enable:
-                xra a
+                xra a       ; a = opcode("nop")
                 jmp $+5
+                ;; disable playback
 gigachad_disable:
-                mvi a, $c9
+                mvi a, $c9  ; a = opcode("ret")
                 sta gigachad_frame
                 ret
                 
-                ; silently process first 16 frames 
-                ; can only be called after gigachad_init
+                ;; gigachad_precharge
+                ;; Silently process first 16 frames so that all data
+                ;; are available for playback.
+                ;; Can only be called after gigachad_init
 gigachad_precharge
                 lxi h, gigachad_nfrm
                 mov a, m
@@ -96,11 +132,13 @@ gigachad_precharge
                 jnz gigachad_precharge                
                 ret
 
-                
+                ;; gigachad_frame
+                ;; Calls scheduler_tick 14 out of 16 frames.
+                ;; May call ay_send, or let user call ay_send_user
 gigachad_frame:
-                ret
+                ret       ; SELFMOD: enable/disable switch: nop / ret
 gigachad_wrap_flag:
-                ora a
+                ora a     ; SELFMOD: stc = wraparound, ora a = normal playback
                 jc gigachad_wrap
 
                 lxi h, gigachad_nfrm
@@ -129,6 +167,8 @@ gigachad_wrap_flag:
                 sta gigachad_wrap_ctr
                 ret
 
+                ; end of song: finish playback and restart
+                ; by recreating all tasks and starting over
 gigachad_wrap:
                 ; burn unpacked remainder
                 ;lxi h, ay_nline
@@ -158,8 +198,9 @@ gigachad_wrap:
 ay_nline        db 0
 gigachad_nfrm   db 0
 gigachad_wrap_ctr db 0
+
                 ;
-                ; AY-3-8910 register buffer
+                ; AY-3-8910 register ports
                 ;
 ayctrl          equ $15
 aydata          equ $14
@@ -171,6 +212,7 @@ ay_outde
                 out aydata
                 ret
                 
+                ; utility: silence the AY
 ay_stfu         lxi d, $0700
                 call ay_outde
                 lxi d, $0800
@@ -179,7 +221,8 @@ ay_stfu         lxi d, $0700
                 call ay_outde
                 lxi d, $0a00
                 jmp ay_outde
-
+                
+                ; utility: make AY noise
 ay_noise	
                 lxi d, $07c7 ; noise enable on channel A
                 call ay_outde
@@ -189,8 +232,8 @@ ay_noise
                 call ay_outde
                 lxi d, $0a03 ; volume pretty low on channel C
                 jmp ay_outde
-		;ret
 
+                ; utility: make AY noise louder
 ay_noise_louder
                 lxi d, $07c7 ; noise enable on channel A
                 call ay_outde
@@ -262,22 +305,32 @@ ay_send_L2
                 ret
 #endif                
                 
+                ;;
+                ;; gigachad rtos kernel
+                ;;
+
+                ;; scheduler_init()
+                ;; sets initial context_ptr and enables scheduler_tick()
 scheduler_init:
                 lxi h, context
                 shld context_ptr
                 xra a
 scheduler_init_L1:                
-                sta scheduler_tick
+                sta scheduler_tick    ; enable the scheduler
                 ret
+
+                ;; scheduler_deinit()
+                ;; disable scheduler_tick()
 scheduler_deinit:
-                mvi a, $c9
+                mvi a, $c9            ; disable the scheduler
                 jmp scheduler_init_L1
                 
-                ;
-                ; call all tasks in order
-                ;
+                ;; scheduler_tick()
+                ;;
+                ;; Calls next task in order.
+                ;;
 scheduler_tick: 
-                ret
+                ret         ; SELFMOD: ret: disable / nop: enable
                 lxi h, 0
                 dad sp
                 shld sched_sp
@@ -293,6 +346,9 @@ scheduler_tick:
                 pop psw
                 ret
 
+                ;; sched_yield()
+                ;;
+                ;; Yield to next task and return from scheduler.
 sched_yield:
                 lxi h, 0 
                 dad sp
@@ -313,21 +369,21 @@ sched_sp        equ $+1
                 lxi sp, 0
                 ret
                 
-
-                ; dzx0 task calls this to yield after producing each octet
+                ;; dzx0 task yields after producing every 16 octets
 dzx0_yield:     push psw
                 push b
                 push d
                 push h
                 jmp sched_yield
 
-                ;
-                ; create a dzx0 task
-                ;
-                ; a = task number (0..n_tasks-1)
-                ; hl = task stack end
-                ; bc = dst buffer
-                ; de = stream source
+                ;; dzx0_create()
+                ;;
+                ;; Create a dzx0 streaming unpacker task.
+                ;;
+                ;; a = task number (0..n_tasks-1)
+                ;; hl = task stack end
+                ;; bc = dst buffer
+                ;; de = stream source
 dzx0_create:                   
                 shld crea_loadsp
                 lxi h, crea_b+1
@@ -363,6 +419,10 @@ dzx0_create_sp  equ $+1
                 lxi sp, 0
                 ret                     ; this is a normal return
 
+                ;; dzx0()
+                ;; 
+                ;; Unpack zx0 stream packed with 256-byte sized window.
+                ;; Yields every 16 bytes.
 dzx0:
 		lxi h,0FFFFh            ; tos=-1 offset?
 		push h
@@ -475,26 +535,14 @@ dzx0_ldir:
 		cmp d
 		jz dzx0_ldir_from_buf
 
-                ; reached the end, just restart the scheduler
-dzx0_ded       ; jmp brutal_restart
-                ; notify that this stream has finished
+                ; reached the end of stream
+dzx0_ded       
+                ; notify gigachad that this stream has finished
                 lxi h, dzx0_finish_ctr
                 inr m
-                ; idle
+                ; idle forever: gigachad will restart the task/stream
                 call dzx0_yield
                 jmp $-3
-
-                ;; jump out of task frame
-                ;lhld sched_sp
-                ;sphl
-
-                ;; load song pointers
-                ;lhld recreate_sptr
-                ;call create_song_tasks
-                ;call gigachad_precharge
-                ;ret
-
-
 
 ;
 ; runtime data (careful with relative equ directives)
